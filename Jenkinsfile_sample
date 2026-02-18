@@ -1,0 +1,54 @@
+pipeline {
+    // where to execute
+    agent any
+    // ENv. variables defined here available to all satges
+    environment {
+        APP_NAME = 'my_app'
+        BRANCH_NAME = 'dev'
+    }
+    // Access buuild tools like maven, gradle and jdk
+    tools{
+        maven 'Maven'
+    }
+    //parameterized your build - string, choice, boolean
+    parameters{
+        string(name: 'APP_NAME', defaultValue: '', description: 'App name to give while deploying')
+        choice(name: 'APP_VERSION', defaultValue: ['1.0', '1.1', '1.2', description: ''])
+        booleanParam(name: 'executeTests', defaultValue: 'true', description: '')
+    }
+    stages{
+        // stage 1
+        stage (build) {
+            // when this stage should execute
+            when {
+                expression{
+                    env.BRANCH_NAME == 'dev' || env.BRANCH_NAME == 'test'
+                }
+            }
+            steps {
+                sh "echo This is build stage - step 1"
+                sh "Deploying Application ${APP_NAME} in ${BRANCH_NAME} environment"
+            }
+        }
+        // stage 2
+        stage (test) {
+            when {
+                expression {
+                    // this stage runs when this param set to true, if false, skips.
+                    params.executeTests
+                }
+            }
+            steps {
+                sh "echo This is test stage - step 1"
+                sh "echo deploying version ${params.VERSION}"
+            }
+        }
+        // stage3
+        stage (deloy) {
+            steps {
+                sh "echo This is deploy stage - step 1"
+                sh "echo This is deploy stage - step 2"
+            }
+        }
+    }
+}
