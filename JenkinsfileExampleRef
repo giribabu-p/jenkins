@@ -1,0 +1,940 @@
+#!/usr/bin/env groovy
+
+EXAMPLE_VERSION='23.*'
+LS_VERSION='9.*'
+EXAMPLE_VERSION='9.*'
+CLEANUP_TOOLS_VERSION='9.*'
+EXAMPLE_CRYPTO_VERSION='9.*'
+EXAMPLE_SCRIPTS_VERSION='9.*'
+EXAMPLE_XML_AUDIT_PLUGIN_VERSION='9.*'
+EXAMPLE_NB_TRANSPORTNODE_VERSION='8.*'
+EXAMPLE_HADOOP_COMMON_VERSION='8.*'
+ADMIN_TOOLS_VERSION='2022.*'
+TT_VERSION='22.*'
+SYSTEM_TOOLS_VERSION='23.*'
+REPORTS_VERSION='23.*'
+EXAMPLE_S_VERSION='23.*'
+EXAMPLE_EXT_PERL_VERSION='5.*'
+EXAMPLE_MCP_TXE_VERSION='8.*'
+EXAMPLE_NODES_VERSION='9.*'
+EXAMPLE_JOB_LIFECYCLE_VERSION='1.*'
+// Tools downloaded for example-init image via curl
+// Give exact versions - Do not use wildcards
+HELM_VERSION='3.11.1'
+KUBECTL_VERSION='1.26.3'
+
+BUSYBOX_CONTAINER_DIR='containers/dr-busybox'
+BUSYBOX_IMAGE='dr-busybox'
+
+JAVA_BASE_DIR='containers/java-base'
+JAVA_BASE_IMAGE='dr-java-base'
+
+PROCESSING_BASE_DIR='containers/processing-base'
+PROCESSING_BASE_IMAGE='dr-processing-base'
+
+TOMCAT_BASE_DIR='containers/tomcat-base'
+TOMCAT_BASE_IMAGE='el-tomcat-base'
+
+EXAMPLE__EXAMPLE_BASE_DIR='containers/EXAMPLE_-ui'
+EXAMPLE__EXAMPLE_IMAGE='dr-EXAMPLE_s-ui'
+
+EXAMPLE__BACKEND_BASE_DIR='containers/EXAMPLE_-backend'
+EXAMPLE__BACKEND_IMAGE='dr-EXAMPLE_s-backend'
+
+EXAMPLE_CONTAINER_DIR='containers/example-image'
+EXAMPLE_IMAGE_NAME='example'
+
+SQL_CHANGELOG_CONTAINER_DIR='containers/dr-sql-changelog-image'
+SQL_CHANGELOG_IMAGE_NAME='dr-sql-changelog'
+
+KEYCLOAK_CLIENT_SETUP_PROJECT_DIR='containers/keycloak-client-setup'
+KEYCLOAK_CLIENT_SETUP_IMAGE_NAME='dr-keycloak-client-setup'
+
+EXAMPLE_EVENTS_EXPORTER_PROJECT_DIR="containers/dr-events-exporter"
+EXAMPLE_EVENTS_EXPORTER_IMAGE_NAME="dr-events-exporter"
+
+METRIC_EXPORTER_PROJECT_DIR="containers/dr-metrics-exporter"
+METRIC_EXPORTER_IMAGE_NAME="dr-metrics-exporter"
+
+SFTP_PROJECT_DIR="containers/dr-sftp-proftpd"
+SFTP_IMAGE_NAME="dr-sftp"
+
+EXAMPLE_IMAGE_DIR='containers/processing-image'
+EXAMPLE_IMAGE='dr-processing'
+
+ORCHESTRATOR_BASE_DIR='containers/orchestrator-image'
+ORCHESTRATOR_IMAGE='udo-orchestrator'
+
+CNF_TOOLS_BASE_DIR='containers/dr-cnf-tools'
+CNF_TOOLS_IMAGE='dr-cnf-tools'
+
+ADMINTOOLS_IMAGE_DIR='containers/admintools-image'
+ADMINTOOLS_IMAGE='dr-admintools'
+
+REPORTS_IMAGE_DIR='containers/reports-image'
+REPORTS_IMAGE='dr-reports'
+
+
+LOOKUP_SERVER_IMAGE_DIR='containers/lookup-server'
+LOOKUP_SERVER_IMAGE='dr-lookup-server'
+
+TIMESTEN_IMAGE_DIR='containers/timesten'
+TIMESTEN_IMAGE='dr-timesten'
+
+EXAMPLE_SCAN_IMAGE_DIR='containers/el-internal-scan-image'
+EXAMPLE_SCAN_IMAGE='el-internal-scan-image'
+
+REDISIO_IMAGE='redisio'
+REDISIO_IMAGE_DIR='containers/redisio'
+REDIS_INIT_IMAGE='redis-init'
+REDIS_INIT_IMAGE_DIR='containers/redis-init'
+REDIS_OAM_IMAGE='redis-oam'
+REDIS_OAM_IMAGE_DIR='containers/redis-oam'
+
+ARTIFACTORY='repo.lab.pl.example.com'
+DOCKER_INPROGRESS="example-docker-inprogress"
+DOCKER_CANDIDATES="example-docker-candidates"
+DOCKER_DEPENDENCIES="example-docker-dependencies"
+DOCKER_RELEASES="example-docker-releases"
+INPROGRESS_REPO="${DOCKER_INPROGRESS}.${ARTIFACTORY}"
+CANDIDATES_REPO="${DOCKER_CANDIDATES}.${ARTIFACTORY}"
+DEPENDENCIES_REPO="${DOCKER_DEPENDENCIES}.${ARTIFACTORY}"
+
+HELM_DIR = "helm/target"
+HELM_INPROGRESS_REPO="example-helm-inprogress"
+HELM_CANDIDATES_REPO="example-helm-candidates"
+HELM_RELEASES_REPO="example-helm-releases"
+
+MVN_DIR = "target"
+MVN_INPROGRESS_REPO="example-mvn-inprogress"
+MVN_CANDIDATES_REPO="example-mvn-candidates"
+MVN_RELEASES_REPO="example-mvn-releases"
+GROUP="com.example.example"
+
+REUSE_IMAGE_TAG=""
+REUSE_REPOSITORY=CANDIDATES_REPO
+
+OMIT_BUILD = ['java-base', 'admintools', 'reports', 'EXAMPLE_s', 'example', 'tomcat-base', 'sftp', 'eventsExporter', 'metricsExporter', 'orchestrator', 'dr-cnf-tools', 'lookup-server', 'timesten', 'keycloak-client-setup','el-internal-scan-image']
+OMIT_BUILD_MVN_FLAGS=""
+
+summaryStageProgress = []
+summaryReusedImages = []
+summaryNewImages = []
+
+def imagesTag = params.IMAGES_AND_HELM_TAG + '-' + BUILD_NUMBER
+def jarVersion = params.IMAGES_AND_HELM_TAG +"." + BUILD_NUMBER
+def imagesTagInHelm = params.INIT_IMAGE_TAG_IN_HELM
+if ( params.INIT_IMAGE_TAG_IN_HELM == "none" ) {
+    imagesTagInHelm = params.IMAGES_AND_HELM_TAG + '-' + BUILD_NUMBER
+}
+def tagList
+if (params.UPDATE_CACHE) {
+    tagList = [imagesTag, "cache"]
+} else {
+    tagList = [imagesTag]
+}
+
+def imageList = [
+                  BUSYBOX_IMAGE, JAVA_BASE_IMAGE, PROCESSING_BASE_IMAGE, EXAMPLE_IMAGE_NAME, EXAMPLE__EXAMPLE_IMAGE, EXAMPLE__BACKEND_IMAGE,
+                  KEYCLOAK_CLIENT_SETUP_IMAGE_NAME, EXAMPLE_IMAGE, ORCHESTRATOR_IMAGE, CNF_TOOLS_IMAGE, TOMCAT_BASE_IMAGE, SQL_CHANGELOG_IMAGE_NAME,
+                  EXAMPLE_EVENTS_EXPORTER_IMAGE_NAME, METRIC_EXPORTER_IMAGE_NAME, SFTP_IMAGE_NAME, ADMINTOOLS_IMAGE, REPORTS_IMAGE, LOOKUP_SERVER_IMAGE, TIMESTEN_IMAGE,
+                  REDISIO_IMAGE, REDIS_INIT_IMAGE, REDIS_OAM_IMAGE, EXAMPLE_SCAN_IMAGE
+                ]
+
+
+def build_container_or_retag(Map map) {
+  retag = map.retag
+  imageName = map.imageName
+  imageTag = map.imageTag
+  dir = map.dir
+  parallel = map.getOrDefault("parallel", true)
+
+  if (retag) {
+    summaryReusedImages << "${DEPENDENCIES_REPO}/${imageName}:${REUSE_IMAGE_TAG} retagged as ${imageName}:${imageTag}"
+    return """
+      docker pull ${DEPENDENCIES_REPO}/${imageName}:${REUSE_IMAGE_TAG} && docker tag ${REUSE_REPOSITORY}/${imageName}:${REUSE_IMAGE_TAG} ${imageName}:${imageTag}
+    """
+  } else {
+    summaryNewImages << "${DEPENDENCIES_REPO}/${imageName}:${imageTag}"
+    return """
+     set -x
+     cd ../../${dir}
+     set -o pipefail
+     echo ${imageName}
+     pwd
+     ls -latr
+     docker build . --build-arg EXAMPLE_TOMCAT_BASE_IMAGE=${TOMCAT_BASE_IMAGE} \\
+      --build-arg EXAMPLE_TOMCAT_BASE_IMAGE_TAG=${imageTag} \\
+      --build-arg PROCESSING_BASE_IMAGE_TAG=${imageTag} \\
+      --build-arg JAVA_BASE_IMAGE_TAG=${imageTag} \\
+      --build-arg EXAMPLE_IMAGE_TAG=${imageTag} \\
+      --build-arg BUSYBOX_IMAGE_TAG=${imageTag} \\
+      --build-arg EXAMPLE_VERSION=${EXAMPLE_VERSION} \\
+      --build-arg SYSTEM_TOOLS_VERSION=${SYSTEM_TOOLS_VERSION} \\
+      --build-arg REPORTS_VERSION=${REPORTS_VERSION} \\
+      --build-arg EXAMPLE_S_VERSION=${EXAMPLE_S_VERSION} \\
+      --build-arg LS_VERSION=${LS_VERSION} \\
+      --build-arg EXAMPLE_VERSION=${EXAMPLE_VERSION} \\
+      --build-arg EXAMPLE_CRYPTO_VERSION=${EXAMPLE_CRYPTO_VERSION} \\
+      --build-arg EXAMPLE_XML_AUDIT_PLUGIN_VERSION=${EXAMPLE_XML_AUDIT_PLUGIN_VERSION} \\
+      --build-arg EXAMPLE_HADOOP_COMMON_VERSION=${EXAMPLE_HADOOP_COMMON_VERSION} \\
+      --build-arg EXAMPLE_NB_TRANSPORTNODE_VERSION=${EXAMPLE_NB_TRANSPORTNODE_VERSION} \\
+      --build-arg CLEANUP_TOOLS_VERSION=${CLEANUP_TOOLS_VERSION} \\
+      --build-arg EXAMPLE_SCRIPTS_VERSION=${EXAMPLE_SCRIPTS_VERSION} \\
+      --build-arg ADMIN_TOOLS_VERSION=${ADMIN_TOOLS_VERSION} \\
+      --build-arg TT_VERSION=${TT_VERSION} \\
+      --build-arg ENABLE_FILE_OVERWRITE="${params.ENABLE_FILE_OVERWRITE}" \\
+      --build-arg EXAMPLE_EXT_PERL_VERSION="${EXAMPLE_EXT_PERL_VERSION}" \\
+      --build-arg EXAMPLE_NODES_VERSION="${EXAMPLE_NODES_VERSION}" \\
+      --build-arg EXAMPLE_MCP_TXE_VERSION="${EXAMPLE_MCP_TXE_VERSION}" \\
+      --build-arg EXAMPLE_JOB_LIFECYCLE_VERSION="${EXAMPLE_JOB_LIFECYCLE_VERSION}" \\
+      --build-arg HELM_VERSION="${HELM_VERSION}" \\
+      --build-arg KUBECTL_VERSION="${KUBECTL_VERSION}" \\
+      --build-arg imageTag=${imageTag} \\
+      \\
+      ${params.UPDATE_CACHE ? "" : "--cache-from ${DEPENDENCIES_REPO}/${imageName}:${CACHE_TAG}"} \\
+      \\
+      -t ${imageName}:${imageTag} 2>&1 | sed 's/^/${imageName}: /g' || echo 'Failed: ${imageName}' >> ../../build-result.txt || exit 1 ${parallel ? "&" : ""}
+      set +o pipefail
+    """
+  }
+}
+
+def wait_for_background_jobs() {
+  return """
+    jobs -p > ./running_jobs.txt
+    wait < ./running_jobs.txt
+
+    if [ -f ../../build-result.txt ]; then
+      cat ../../build-result.txt
+      exit 1
+    fi
+    echo '=======END OF BUILD STAGE======'
+  """
+}
+
+
+boolean triggeredManually = env.gitlabActionType == null
+
+pipeline {
+  agent {
+    kubernetes {
+      label "k8s-example-containerization-${cto.devops.jenkins.Utils.getTimestamp()}"
+      inheritFrom 'k8s-dind-rootless'
+      yaml """
+# Changes required to use buildah - see comments in DO-21345
+metadata:
+  annotations:
+    container.apparmor.security.beta.kubernetes.io/build: unconfined
+spec:
+  containers:
+  - name: 'build'
+    image: example-docker-candidates.repo.lab.pl.example.com/el-build-image:${params.gitlabSourceBranch}
+    # Changes required to use buildah - see comments in DO-21345
+    securityContext:
+      seccompProfile:
+        type: Unconfined
+    workingDir: /home/jenkins
+    command:
+    - cat
+    tty: true
+      """
+    }
+  }
+ options {
+     timestamps()
+     buildDiscarder(logRotator(daysToKeepStr: '30', artifactDaysToKeepStr: '2') )
+     timeout(time: 2000, unit: 'MINUTES')
+     gitLabConnection('scm.cci.example.net')
+ }
+ triggers {
+     parameterizedCron('''
+     H 0 * * 0,2,3,4,5,6 % gitlabSourceBranch=master;UPDATE_CACHE=true;RUN_SCANS_AND_OTHER_JOBS=true
+     H 0 * * 1 % gitlabSourceBranch=master;UPDATE_CACHE=true;RUN_SCANS_AND_OTHER_JOBS=true;RUN_NOTIFY_ANCHORE_JOB=true
+     ''')
+    gitlab(
+      triggerOnPush: true,
+      branchFilterType: 'NameBasedFilter',
+      includeBranchesSpec: "master",
+      triggerOnMergeRequest: true,
+      triggerOpenMergeRequestOnPush: "never",
+      triggerOnNoteRequest: true,
+      noteRegex: "Jenkins please retry a build",
+      skipWorkInProgressMergeRequest: false,
+      ciSkip: false,
+      setBuildDescription: true,
+      addNoteOnMergeRequest: true,
+      addCiMessage: true,
+      addVoteOnMergeRequest: true,
+      acceptMergeRequestOnSuccess: true,
+      cancelPendingBuildsOnUpdate: false,
+      secretToken: '12345'
+   )
+ }
+ parameters {
+     string(
+         name: 'gitlabSourceBranch',
+         defaultValue: "master",
+         description: 'Default is master branch, typically overridden on Gitlab builds',
+     )
+     booleanParam(
+        name: 'UPDATE_CACHE',
+        defaultValue: false,
+        description: 'Updates the container caches'
+     )
+     booleanParam(
+        name: 'RUN_SCANS_AND_OTHER_JOBS',
+        defaultValue: false,
+        description: 'Run Anchore and malware scans. Also controls triggering of test_all and tar_package_EXAMPLE_cnf.'
+     )
+    booleanParam(
+        name: 'RUN_NOTIFY_ANCHORE_JOB',
+        defaultValue: false,
+        description: 'Trigger notify_anchore_report jenkins job'
+     )
+     string(
+        name: 'IMAGES_AND_HELM_TAG',
+        defaultValue: "22.0",
+        description: 'Tag for images and helm chart version. Build number is appended to the tag.',
+     )
+     booleanParam(
+        name: 'USE_CANDIDATE_RPM',
+        defaultValue: false,
+        description: 'Install candidate RPM into images.',
+     )
+     booleanParam(
+        name: 'ENABLE_FILE_OVERWRITE',
+        defaultValue: false,
+        description: 'Enable overwriting files in processing image for development purposes',
+     )
+     string(
+         name: 'INIT_IMAGE_TAG_IN_HELM',
+         defaultValue: "none",
+         description: 'Leave value as none to use IMAGES_AND_HELM_TAG-BUILD_NUMBER format by default. Change this only if older images need to be used in helm chart.'
+     )
+     booleanParam(
+         name: 'SONARQUBE_ENABLED',
+         defaultValue: true,
+         description: 'Enable/disable SonarQube scan and quality gate check.'
+     )
+ }
+ environment {
+     CURRENT_TIME = "${cto.devops.jenkins.Utils.getTimestamp()}"
+     BUILD_CAUSE = "${cto.devops.jenkins.Utils.getCause(currentBuild)}"
+     ARTIFACTORY_KEY = credentials('example-artifactory')
+ }
+ stages {
+   stage('lfs checkout') {
+     steps {
+       script {
+          summaryStageProgress << "\"${STAGE_NAME}\" started..."
+          currentBuild.displayName = "#${env.BUILD_NUMBER} ${env.GIT_BRANCH}"
+          switch("${env.BUILD_CAUSE}") {
+              case "UserIdCause": currentBuild.description = "${env.BUILD_CAUSE}"; break
+              case "GitLabWebHookCause": echo "${env.BUILD_CAUSE}"; break
+              case "UpexampleCause": currentBuild.description = "${env.BUILD_CAUSE}"; break
+              default: currentBuild.description = "${env.BUILD_CAUSE}"
+          }
+       }
+       container('tools') {
+         sh """
+            #git config lfs.url "https://ca_example_jenkins:Welcome567@artifactory-espoo2.int.net.example.com/artifactory/api/lfs/dr-containers-local"
+            git config lfs.url "https://repo3.cci.example.net/artifactory/api/lfs/dr-containers-local"
+            git lfs pull
+            rm .git/hooks/post-checkout  # this is necessary to be able to do git checkout, as is done in UI build to revert index.html
+         """
+       }
+       script {
+         summaryStageProgress << "\"${STAGE_NAME}\" completed."
+       }
+     }
+   }
+     stage('Maven build of everything') {
+        steps {
+            script {
+              summaryStageProgress << "\"${STAGE_NAME}\" started..."
+            }
+            container('build') {
+                dir(".") {
+                  script {
+                    gitHash = sh(returnStdout: true, script: 'git rev-parse HEAD').trim().substring(0, 4)
+                    tagList << gitHash
+                    echo "Images will be tagged with ${gitHash}"
+
+                    if (params.UPDATE_CACHE) {
+                      OMIT_BUILD = []
+                      return
+                    }
+                    BUILD_GRAPH = [
+                        'containers/template-properties.sh': ['example', 'orchestrator'],
+                        'containers/db.properties.template': ['UI','example','tomcat-base'],
+                        'containers/dr-busybox': ['dr-busybox'],
+                        'containers/dr-sql-changelog-image': ['dr-busybox','dr-sql-changelog-image'],
+                        'containers/admintools-image': ['admintools'],
+                        'containers/reports-image': ['reports'],
+                        'containers/EXAMPLE_-': ['EXAMPLE_s'],
+                        'containers/tomcat-base': ['UI', 'admintools', 'reports', 'EXAMPLE_s', 'tomcat-base'],
+                        'containers/processing-base': ['example'],
+                        'containers/processing-image': ['example'],
+                        'containers/dr-sftp-proftpd': ['sftp'],
+                        'containers/dr-metrics-exporter': ['metricsExporter'],
+                        'containers/dr-events-exporter': ['eventsExporter'],
+                        'dr-metrics-exporter': ['metricsExporter'],
+                        'dr-events-exporter': ['eventsExporter'],
+                        'helm/example-template': ['dr-cnf-tools'],
+                        'containers/java-base': ['java-base','metricsExporter','eventsExporter', 'example'],
+                        'containers/orchestrator-image': ['orchestrator'],
+                        'containers/keycloak-client-setup': ['keycloak-client-setup'],
+                        'containers/lookup-server': ['lookup-server'],
+                        'containers/timesten': ['timesten'],
+                        'containers/redisio': ['redisio'],
+                        'containers/redis-init': ['redis-init'],
+                        'containers/redis-oam': ['redis-oam'],
+                        'containers/el-internal-scan-image': ['el-internal-scan-image']
+                    ]
+
+                    echo "Searching for previous builds:"
+                    previousBuildGitHash = ""
+                    previousBuildCommitsAgo = -1
+                    previousBuildRepository = REUSE_REPOSITORY
+
+                    out = sh(returnStdout: true, script: '''
+#!/bin/bash
+
+for i in `seq 0 9`; do
+  hash=`git rev-parse HEAD~$i`
+  branch=`git branch -r --contains $hash`
+  short_hash=${hash:0:4}
+  for j in `seq 1 5`; do
+    echo "Looking for $short_hash in $branch"
+    out=`curl -s https://repo.cci.example.net/example-docker-dependencies/example/${short_hash}/`
+    if [[ "$out" =~ "Unable to forward request" || $out =~ "ERR_CANNOT_FORWARD" ]]; then
+      echo "Artifactory is unresponsive, trying again"
+      sleep 1
+      continue
+    fi
+    break
+  done
+  if [[ ! "$out" =~ '"errors"' ]]; then
+    echo "Found previous build:"
+    echo "hash: $short_hash"
+    echo "commitsAgo: $i"
+    echo "repository: example-docker-dependencies"
+    exit 0
+  fi
+done
+
+echo "No previous build found"
+                    ''')
+
+                    if(out.contains("Found previous build")) {
+                      previousBuildGitHash = (out =~ /hash: ([a-zA-Z0-9]+)/)[0][1]
+                      previousBuildCommitsAgo = (out =~ /commitsAgo: ([0-9]+)/)[0][1]
+                      previousBuildRepository = (out =~ /repository: (.*)/)[0][1]
+                      previousBuildRepository = "${previousBuildRepository}.${ARTIFACTORY}"
+                    }
+
+                    if (previousBuildCommitsAgo == -1) {
+                      OMIT_BUILD = []
+                      return
+                    }
+
+                    changedFiles = sh(returnStdout: true, script: "git diff --name-only --diff-filter=AMexample--cached HEAD~${previousBuildCommitsAgo}").trim()
+                    echo "Changed files: ${changedFiles}"
+
+                    for (k in BUILD_GRAPH.keySet()) {
+                      if (!changedFiles.contains(k))
+                        continue
+                      OMIT_BUILD.removeAll(BUILD_GRAPH.get(k))
+                    }
+
+                    echo "Those components will be omitted from the build: ${OMIT_BUILD.join(',')}"
+
+                    REUSE_IMAGE_TAG = previousBuildGitHash
+                    REUSE_REPOSITORY = previousBuildRepository
+                    echo "REUSE_IMAGE_TAG: ${REUSE_IMAGE_TAG}. REUSE_REPOSITORY: ${REUSE_REPOSITORY}"
+                  }
+                }
+            }
+            container('build') {
+                script {
+                  echo sh(returnStdout: true, script: 'env|sort')
+                  withCredentials([usernamePassword(credentialsId: 'example-artifactory', passwordVariable: 'MAVEN_PASSWORD', usernameVariable: 'MAVEN_USERNAME')]) {
+
+                    mvnBuildNumber = env.BUILD_NUMBER + "-mvn"
+                    // Create newBuildInfo for use in BUILD_NAME
+                    def rtBuildInfo = Artifactory.newBuildInfo()
+                    sh """
+                        sed -i s/MAVEN_USERNAME/${MAVEN_USERNAME}/ settings.xml pom.xml helm/example-template/pom.xml
+                        sed -i s/MAVEN_PASSWORD/${MAVEN_PASSWORD}/ settings.xml pom.xml helm/example-template/pom.xml
+                        export BUILD_NUMBER="${mvnBuildNumber}"
+                        # BUILD_NAME becomes el-cnf-tools by default
+                        # Below line changes it to "example :: DevOps :: Containerization :: all"
+                        export BUILD_NAME="${rtBuildInfo.name}"
+                        mvn --version
+                        export ORIG_JAVA_HOME=\$JAVA_HOME
+                        mvn --settings settings.xml versions:set -DnewVersion=${imagesTag}
+                        cd helm/example-template
+                        mvn --settings ../../settings.xml versions:set -DnewVersion=${imagesTag}
+                        cd -
+                        mvn --batch-mode \\
+                            --settings settings.xml \\
+                            -PgruntOptimize \\
+                            -PgruntLinux \\
+                            -Pproduction \\
+                            -DskipJavascriptTests \\
+                            -Ddr.helm.chart.version=${imagesTag} \\
+                            -Ddr.images.tag=${imagesTagInHelm} \\
+                            -Dartifactory.username=${MAVEN_USERNAME} -Dartifactory.password=${MAVEN_PASSWORD} \\
+                            deploy
+                        ls -latr
+                        ls -latr */target
+                        ls -latr */*/target
+                    """
+                  }
+                }
+            }
+            script {
+              summaryStageProgress << "\"${STAGE_NAME}\" completed."
+            }
+        }
+     }
+     stage('SonarQube Analysis') {
+         when {
+             expression { return params.SONARQUBE_ENABLED }
+         }
+         environment {
+             SONAR_LOGIN = credentials('example-cnf-sonarqube')
+             SONAR_PROJECT_KEY = "com.example.dr.example:cnf"
+             SONAR_PROJECT_VERSION = "1.0"
+         }
+         steps {
+             container('build') {
+                 script {
+                     withSonarQubeEnv(credentialsId: 'example-cnf-sonarqube') {
+                         sh """
+                             # Remove prefix 'origin/'
+                             git_branch_name=\$(echo ${env.GIT_BRANCH} |cut -d '/' -f 2-)
+                             export JAVA_HOME=/java11
+                             export PATH=\$JAVA_HOME/bin:\$PATH
+                             which java
+                             \$JAVA_HOME/bin/java -version
+                             mvn --version
+                             mvn sonar:sonar \\
+                                 --batch-mode \\
+                                 --settings settings.xml \\
+                                 -DskipTests=true \\
+                                 -Dsonar.projectKey=${SONAR_PROJECT_KEY} \\
+                                 -Dsonar.host.url=https://sonarqube.int.net.example.com \\
+                                 -Dsonar.login=${SONAR_LOGIN} \\
+                                 -Dsonar.branch.name=\$git_branch_name
+                             ls -latr target
+                             ls -latr target/*
+                         """
+                     }
+                     timeout(time: 5, unit: 'MINUTES') {
+                         // Parameter indicates whether to set pipeline to UNSTABLE if Quality Gate fails
+                         // true = set pipeline to UNSTABLE, false = don't
+                         waitForQualityGate abortPipeline: true
+                     }
+                 }
+             }
+         }
+     }
+     stage('Build images in parallel') {
+        environment {
+            CACHE_TAG="${params.UPDATE_CACHE ? 'nocache' : 'cache'}"
+        }
+        steps {
+            script {
+              summaryStageProgress << "\"${STAGE_NAME}\" started..."
+            }
+            container('build') {
+                script {
+                    sh """
+                      set -x
+                      if ! ${params.USE_CANDIDATE_RPM}; then
+                        sed -i '/.*CANDIDATE_RPM_START.*/,/.*CANDIDATE_RPM_END.*/d' containers/*repo
+                      fi
+                      set -e
+                      echo "Copy el-cnf-tools.jar from helm/example-template/target"
+                      cp helm/example-template/target/el-cnf-tools-*-jar-with-dependencies.jar /bin/el-cnf-tools.jar
+                      set +e
+                      find containers/* -maxdepth 1 -type d | xargs -n 1 echo \$1
+                      find containers/* -maxdepth 1 -type d | xargs -n 1 cp containers/*sh containers/*repo containers/*template /bin/el-cnf-tools.jar /bin/log4j*.jar /bin/mariadb*.jar /bin/liquibase-core-*.jar /bin/jakarta.xml.bind-api-*.jar /bin/jaxb-*.jar /bin/istack-*.jar \$1
+                      set -e
+                      # Download helm and kubectl commands
+                      cd containers/dr-cnf-tools
+                      curl -O https://repo.lab.pl.example.com/get-helm-sh/helm-v${HELM_VERSION}-linux-amd64.tar.gz
+                      tar -zxf helm-v${HELM_VERSION}-linux-amd64.tar.gz
+                      rm -rf helm-v${HELM_VERSION}-linux-amd64.tar.gz
+                      mv linux-amd64/helm .
+                      rm -rf linux-amd64
+                      curl -O https://repo.lab.pl.example.com/storage-googleapis-com-kubernetes-client/v${KUBECTL_VERSION}/bin/linux/amd64/kubectl
+                      chmod 777 kubectl
+                      # Download node-packages
+                      dnf install --downloadonly --downloaddir=. -y el-nodes-${EXAMPLE_NODES_VERSION}
+                      rpm2cpio el-nodes-*.rpm | cpio -idmv
+                      mv ./opt/example/example/node-packages/el-nodes-*.tar.gz .
+                      tar -xvf el-nodes-*.tar.gz
+                      rm el-nodes-*.tar.gz
+                      cd -
+                    """
+                    if (!OMIT_BUILD.contains('java-base')) {
+                      sh """
+                          env|sort
+                          export DOCKER_BUILDKIT=1
+                          cd ${JAVA_BASE_DIR}
+                          sh build_image.sh ${JAVA_BASE_IMAGE} ${imagesTag} ${JENKINS_AGENT_WORKDIR}
+                          cd -
+                        """
+                      summaryNewImages << "${JAVA_BASE_IMAGE}:${imagesTag}."
+                    }
+                }
+            }
+
+            container('tools') {
+                dir(TOMCAT_BASE_DIR) {
+                         script {
+                            if (OMIT_BUILD.contains('java-base') == false) {
+                                  sh """
+                                      #Load the buildah Java baseimage from file
+                                      ls -latr ${JENKINS_AGENT_WORKDIR}
+                                      docker load -i ${JENKINS_AGENT_WORKDIR}/${JAVA_BASE_IMAGE}.tgz
+                                      docker tag ${JAVA_BASE_IMAGE}:${imagesTag} ${JAVA_BASE_IMAGE}:latest
+                                      #List images
+                                      docker images
+                                """
+                            } else {
+                              sh """
+                                  docker pull ${CANDIDATES_REPO}/${JAVA_BASE_IMAGE}:${CACHE_TAG}
+                                  docker tag ${CANDIDATES_REPO}/${JAVA_BASE_IMAGE}:${CACHE_TAG} ${JAVA_BASE_IMAGE}:${imagesTag}
+                                  docker tag ${CANDIDATES_REPO}/${JAVA_BASE_IMAGE}:${CACHE_TAG} ${JAVA_BASE_IMAGE}:latest
+                              """
+                              summaryReusedImages << "${CANDIDATES_REPO}/${JAVA_BASE_IMAGE}:${CACHE_TAG} retagged as ${JAVA_BASE_IMAGE}:${imagesTag}."
+                            }
+                            sh """
+                                env|sort
+                                export DOCKER_BUILDKIT=1
+                                ${build_container_or_retag(retag: OMIT_BUILD.contains('dr-busybox'), dir: BUSYBOX_CONTAINER_DIR, imageName: BUSYBOX_IMAGE, imageTag: imagesTag)}
+
+                                ${build_container_or_retag(retag: OMIT_BUILD.contains('tomcat-base'), dir: TOMCAT_BASE_DIR, imageName: TOMCAT_BASE_IMAGE, imageTag: imagesTag)}
+                                ${build_container_or_retag(retag: OMIT_BUILD.contains('example'), dir: PROCESSING_BASE_DIR, imageName: PROCESSING_BASE_IMAGE, imageTag: imagesTag)}
+                                ${build_container_or_retag(retag: OMIT_BUILD.contains('sftp'), dir: SFTP_PROJECT_DIR, imageName: SFTP_IMAGE_NAME, imageTag: imagesTag)}
+                                ${build_container_or_retag(retag: OMIT_BUILD.contains('metricsExporter'), dir: METRIC_EXPORTER_PROJECT_DIR, imageName: METRIC_EXPORTER_IMAGE_NAME, imageTag: imagesTag)}
+                                ${build_container_or_retag(retag: OMIT_BUILD.contains('eventsExporter'), dir: EXAMPLE_EVENTS_EXPORTER_PROJECT_DIR, imageName: EXAMPLE_EVENTS_EXPORTER_IMAGE_NAME, imageTag: imagesTag)}
+                                ${build_container_or_retag(retag: OMIT_BUILD.contains('keycloak-client-setup'), dir: KEYCLOAK_CLIENT_SETUP_PROJECT_DIR, imageName: KEYCLOAK_CLIENT_SETUP_IMAGE_NAME, imageTag: imagesTag)}
+                                ${build_container_or_retag(retag: OMIT_BUILD.contains('lookup-server'), dir: LOOKUP_SERVER_IMAGE_DIR, imageName: LOOKUP_SERVER_IMAGE, imageTag: imagesTag)}
+                                ${build_container_or_retag(retag: OMIT_BUILD.contains('timesten'), dir: TIMESTEN_IMAGE_DIR, imageName: TIMESTEN_IMAGE, imageTag: imagesTag)}
+
+                                ${build_container_or_retag(retag: OMIT_BUILD.contains('redis'), dir: REDISIO_IMAGE_DIR, imageName: REDISIO_IMAGE, imageTag: imagesTag)}
+                                ${build_container_or_retag(retag: OMIT_BUILD.contains('redis-init'), dir: REDIS_INIT_IMAGE_DIR, imageName: REDIS_INIT_IMAGE, imageTag: imagesTag)}
+                                ${build_container_or_retag(retag: OMIT_BUILD.contains('redis-oam'), dir: REDIS_OAM_IMAGE_DIR, imageName: REDIS_OAM_IMAGE, imageTag: imagesTag)}
+
+                                ${build_container_or_retag(retag: OMIT_BUILD.contains('el-internal-scan-image'), dir: EXAMPLE_SCAN_IMAGE_DIR, imageName: EXAMPLE_SCAN_IMAGE, imageTag: imagesTag)}
+
+                                ${wait_for_background_jobs()}
+
+                                ${build_container_or_retag(retag: OMIT_BUILD.contains('dr-sql-changelog'), dir: SQL_CHANGELOG_CONTAINER_DIR, imageName: SQL_CHANGELOG_IMAGE_NAME, imageTag: imagesTag)}
+                                ${build_container_or_retag(retag: OMIT_BUILD.contains('UI'), dir: EXAMPLE_CONTAINER_DIR, imageName: EXAMPLE_IMAGE_NAME, imageTag: imagesTag)}
+                                ${build_container_or_retag(retag: OMIT_BUILD.contains('admintools'), dir: ADMINTOOLS_IMAGE_DIR, imageName: ADMINTOOLS_IMAGE, imageTag: imagesTag)}
+                                ${build_container_or_retag(retag: OMIT_BUILD.contains('reports'), dir: REPORTS_IMAGE_DIR, imageName: REPORTS_IMAGE, imageTag: imagesTag)}
+                                ${build_container_or_retag(retag: OMIT_BUILD.contains('EXAMPLE_s'), dir: EXAMPLE__EXAMPLE_BASE_DIR, imageName: EXAMPLE__EXAMPLE_IMAGE, imageTag: imagesTag)}
+                                ${build_container_or_retag(retag: OMIT_BUILD.contains('EXAMPLE_s'), dir: EXAMPLE__BACKEND_BASE_DIR, imageName: EXAMPLE__BACKEND_IMAGE, imageTag: imagesTag)}
+                                ${build_container_or_retag(retag: OMIT_BUILD.contains('example'), dir: EXAMPLE_IMAGE_DIR, imageName: EXAMPLE_IMAGE, imageTag: imagesTag)}
+
+                                ${wait_for_background_jobs()}
+                                
+                                ${build_container_or_retag(retag: OMIT_BUILD.contains('orchestrator'), dir: ORCHESTRATOR_BASE_DIR, imageName: ORCHESTRATOR_IMAGE, imageTag: imagesTag)}
+                                ${build_container_or_retag(retag: OMIT_BUILD.contains('dr-cnf-tools'), dir: CNF_TOOLS_BASE_DIR, imageName: CNF_TOOLS_IMAGE, imageTag: imagesTag)}
+
+                                ${wait_for_background_jobs()}
+                             """
+                         }
+                }
+            }
+            script {
+              summaryStageProgress << "\"${STAGE_NAME}\" completed."
+            }
+        }
+     }
+     stage('Tag and Publish The Inprogress Images') {
+         when {
+             not {
+                 anyOf {
+                     expression { return params.UPDATE_CACHE }
+                     expression { return triggeredManually }
+                     environment name: 'gitlabBranch', value: 'master'
+                 }
+             }
+         }
+         steps {
+            script {
+              summaryStageProgress << "\"${STAGE_NAME}\" started..."
+            }
+            container('tools') {
+                script {
+                    withCredentials([usernamePassword(credentialsId: 'example-artifactory', passwordVariable: 'ARTIFACTORY_PWD', usernameVariable: 'ARTIFACTORY_USER')]) {
+
+                        def command = "set -x\nrm -rf pid;docker login -u ${ARTIFACTORY_USER} -p ${ARTIFACTORY_PWD} ${INPROGRESS_REPO}\n"
+                        for(tag in tagList) {
+                            for (image in imageList) {
+                               command += "docker tag ${image}:${imagesTag} ${INPROGRESS_REPO}/${image}:${tag}\n"
+                               command += "nohup docker push ${INPROGRESS_REPO}/${image}:${tag} &\n"
+                               command += "echo \$! >> pid\n"
+                            }
+                        }
+                        command += "wait \$(cat pid)\n"
+                        sh command
+                    }
+                }
+            }
+             dir(HELM_DIR) {
+                 script {
+                     def rtServer = Artifactory.newServer url: env.ARTIFACTORY_HTTPS_URL, credentialsId: 'example-artifactory'
+
+                     def uploadSpec = """{
+                          "files": [
+                              {
+                                  "pattern": "*-${imagesTag}.tgz",
+                                  "target": "${HELM_INPROGRESS_REPO}"
+                              }
+                          ]
+                     }"""
+                     rtServer.upload(uploadSpec)
+                 }
+             }
+             script {
+               summaryStageProgress << "\"${STAGE_NAME}\" completed."
+             }
+         }
+     }
+    stage('Tag and Publish The Candidate Images') {
+      when {
+        anyOf {
+          expression { return params.UPDATE_CACHE }
+          expression { return triggeredManually }
+          environment name: 'gitlabBranch', value: 'master'
+        }
+      }
+      steps {
+        script {
+          summaryStageProgress << "\"${STAGE_NAME}\" started..."
+        }
+        container('tools') {
+          script {
+            withCredentials([usernamePassword(credentialsId: 'example-artifactory', passwordVariable: 'ARTIFACTORY_PWD', usernameVariable: 'ARTIFACTORY_USER')]) {
+
+              def rtServer = Artifactory.newServer url: env.ARTIFACTORY_HTTPS_URL, credentialsId: 'example-artifactory'
+              def rtDocker = Artifactory.docker server: rtServer
+              def rtBuildInfo = Artifactory.newBuildInfo()
+              rtBuildInfo.env.capture = true
+              rtBuildInfo.env.collect()
+
+              def taggedImages = []
+              tagCommand = ""
+              def imageLine = ""
+              for (image in imageList) {
+                imageStr = "${CANDIDATES_REPO}/${image}:${imagesTag}"
+                tagCommand += "docker tag ${image}:${imagesTag} ${imageStr}\n"
+                imageLine += "${CANDIDATES_REPO}/${image}:${imagesTag}\n"
+                taggedImages << imageStr
+              }
+              sh tagCommand
+
+              // Run docker push in parallel - this makes rtDocker.push faster
+              def command = "set -x\nrm -rf pid;docker login -u ${ARTIFACTORY_USER} -p ${ARTIFACTORY_PWD} ${CANDIDATES_REPO}\n"
+              for(tag in tagList) {
+                for (image in imageList) {
+                  command += "docker tag ${image}:${imagesTag} ${CANDIDATES_REPO}/${image}:${tag} || true\n"
+                  command += "nohup docker push ${CANDIDATES_REPO}/${image}:${tag} || true &\n"
+                  command += "echo \$! >> pid\n"
+                }
+              }
+              command += "wait \$(cat pid)"
+              sh command
+
+              for(image in taggedImages) {
+                def buildInfo = rtDocker.push "${image}", "${DOCKER_CANDIDATES}"
+                rtBuildInfo.append buildInfo
+              }
+
+              // Apply the buildDiscarder configuration in Jenkins to the job's builds published to Artifactory
+              cto.devops.jenkins.Utils.updateBuildRetention(currentBuild, rtBuildInfo)
+
+              publishBuildInfo buildInfo: rtBuildInfo, server: rtServer
+
+              def rtPromotionConfig = [
+                'buildName'          : rtBuildInfo.name,
+                'buildNumber'        : rtBuildInfo.number,
+                'status'             : 'Released',
+                'comment'            : 'Promote exampleimages.',
+                'sourceRepo'         : DOCKER_CANDIDATES + "-local",
+                'targetRepo'         : DOCKER_RELEASES,
+                'includeDependencies': false,
+                'copy'               : true, // "copy" must be used because "move" requires delete permission
+                'failFast'           : false // Bug DO-11377 causes promotion to fail, use 'false' workaround
+              ]
+              Artifactory.addInteractivePromotion promotionConfig: rtPromotionConfig, server: rtServer, displayName: "Promote exampleimages"
+
+              if(params.RUN_SCANS_AND_OTHER_JOBS) {
+                sh """
+                  set -x
+                  mkdir -p scan
+                  cd scan
+                  echo -e '${imageLine}' > file
+                  images=\$(cat file)
+                  for image in \$images; do
+                    echo \$image
+                    output_file=\$(echo \$image | sed 's@.*/@@g')
+                    docker save \$image -o \$output_file.tar
+                    chmod 777 \$output_file.tar
+                    ls -latr
+                  done
+                  docker run --rm -w /workdir -v \$(pwd):/workdir:ro -v /tmp/sep:/sep/tmp -u \$(id -u):\$(id -g) secops-docker-local.artifactory-fpark1.int.net.example.com/sep sep.py scan --extract . --include-ext .tar
+                """
+                catchError(buildResult: 'SUCCESS', stageResult: 'FAILURE') {
+                  //Anchrore scan
+                  writeFile file: 'anchore_images', text: imageLine
+                  anchore engineRetries: '1000', name: 'anchore_images', forceAnalyze: true, autoSubscribeTagUpdates: false
+                }
+                if(params.RUN_NOTIFY_ANCHORE_JOB) {
+                  // Trigger notify_anchore_report
+                  build job: 'example/DevOps/Containerization/notify_anchore_report', parameters: [string(name: 'gitlabSourceBranch', value: "master"),string(name: 'ALL_JOB_BUILD_NUMBER_WITH_ANCHORE_REPORT', value: "${BUILD_NUMBER}")], wait: false
+                }
+              }
+            }
+          }
+          dir(HELM_DIR) {
+            script {
+
+              def rtServer = Artifactory.newServer url: env.ARTIFACTORY_HTTPS_URL, credentialsId: 'example-artifactory'
+
+              def uploadSpec = """{
+                "files": [
+                  {
+                    "pattern": "*-${imagesTag}.tgz",
+                    "target": "${HELM_CANDIDATES_REPO}"
+                  }
+                ]
+              }"""
+
+              def rtBuildInfo = Artifactory.newBuildInfo()
+              rtBuildInfo.env.capture = true
+              rtBuildInfo.env.collect()
+              rtBuildInfo.number = env.BUILD_NUMBER + "-helm"
+              rtServer.upload(uploadSpec, rtBuildInfo)
+              rtServer.publishBuildInfo(rtBuildInfo)
+
+              // Allow interactive promotion of the build
+              def rtPromotionConfig = [
+                'buildName'          : rtBuildInfo.name,
+                'buildNumber'        : rtBuildInfo.number,
+                'status'             : 'Released',
+                'comment'            : 'Promote examplechart',
+                'sourceRepo'         : HELM_CANDIDATES_REPO + "-local",
+                'targetRepo'         : HELM_RELEASES_REPO + "-local", //non-local doesn't exist for helm
+                'includeDependencies': false,
+                'copy'               : true, // "copy" must be used because "move" requires delete permission
+                'failFast'           : true
+              ]
+              Artifactory.addInteractivePromotion promotionConfig: rtPromotionConfig, server: rtServer, displayName: "Promote examplehelm charts"
+            }
+          }
+          dir(MVN_DIR) {
+            script {
+              // Reference: https://confluence-app.ext.net.example.com/display/public/AACTODEVOPS/Guidelines+for+Maven+builds#GuidelinesforMavenbuilds-MavendeploywithArtifactorybuildinfo-InteractivePromotion
+              // Load build-info.json generated from earlier build stage
+              def jsonBuildInfo = readJSON file: "build-info.json"
+              def rtServer = Artifactory.newServer url: env.ARTIFACTORY_HTTPS_URL, credentialsId: 'example-artifactory'
+
+              // Allow interactive promotion of the build
+              def rtPromotionConfig = [
+                'buildName'          : jsonBuildInfo.name,
+                'buildNumber'        : jsonBuildInfo.number,
+                'status'             : 'Released',
+                'comment'            : 'Promote examplemvn artifacts',
+                'sourceRepo'         : MVN_CANDIDATES_REPO + "-local",
+                'targetRepo'         : MVN_RELEASES_REPO,
+                'includeDependencies': false,
+                'copy'               : true, // "copy" must be used because "move" requires delete permission
+                'failFast'           : true
+              ]
+              Artifactory.addInteractivePromotion promotionConfig: rtPromotionConfig, server: rtServer, displayName: "Promote examplemvn artifacts"
+            }
+          }
+          container('tools') {
+            sshagent (credentials: ['dr-gitlab']) {
+              sh """
+                set -x
+                ssh -o StrictHostKeyChecking=no -T git@scm.cci.example.net
+                echo "Adding Git Notes with Build ID"
+                git config --global user.name "Jenkins Service Account"
+                git config --global user.email "noop@example.com"
+                git fetch origin refs/notes/*:refs/notes/*
+                git notes append -m 'Build: ${imagesTag}'
+                git push origin refs/notes/*
+              """
+            }
+          }
+          script {
+            if(params.RUN_SCANS_AND_OTHER_JOBS) {
+              // Run test_all without release_test in bcmt2 with ISTIO false
+              build job: 'example/DevOps/Containerization/test_all', parameters: [booleanParam(name: 'RELEASE_TEST', value: false),string(name: 'TEST_HOST_IP', value: "10.75.187.12"),booleanParam(name: 'ISTIO', value: false),string(name: 'EXAMPLE_VERSION', value: "${imagesTag}"),string(name: 'REDIS_VERSION', value: "${imagesTag}"),string(name: 'gitlabSourceBranch', value: "${params.gitlabSourceBranch}")], wait: false
+              // Run test_all without release_test in bcmt2 with ISTIO true
+              build job: 'example/DevOps/Containerization/test_all', parameters: [booleanParam(name: 'RELEASE_TEST', value: false),string(name: 'TEST_HOST_IP', value: "10.75.187.12"),booleanParam(name: 'ISTIO', value: true),string(name: 'EXAMPLE_VERSION', value: "${imagesTag}"),string(name: 'REDIS_VERSION', value: "${imagesTag}"),string(name: 'gitlabSourceBranch', value: "${params.gitlabSourceBranch}")], wait: false
+              // Run tar_package_EXAMPLE_cnf (it will also trigger release_test)
+              build job: 'example/DevOps/Containerization/tar_package_EXAMPLE_cnf', parameters: [string(name: 'gitlabSourceBranch', value: "${params.gitlabSourceBranch}"),string(name: 'EXAMPLE_VERSION', value: "${imagesTag}")], wait: false
+              summaryStageProgress << "\"${STAGE_NAME}\" completed."
+            }
+          }
+        }
+      }
+   }
+ }
+ post {
+  always {
+      script {
+          container('tools') {
+              sh """
+                set -x
+                set +e
+                images=\$(docker images | grep -v REPOSITORY | grep -v "/" | grep -v el-internal-scan-image | awk '{print \$1":"\$2}')
+                for image in \$images; do
+                  docker run --rm --entrypoint cat \$image /var/lib/rpms-installed.manifest >> /tmp/rpms-installed.manifest.tmp
+                done
+                cat /tmp/rpms-installed.manifest.tmp | sort | uniq > rpms-installed.manifest
+
+                docker images | awk '{print \$1":"\$2" - "\$7\$8}'
+              """
+              currentBuild.description = currentBuild.description +"<p>${imagesTag}"
+          }
+          archiveArtifacts artifacts: "rpms-installed.manifest", fingerprint: true
+          SUMMARY = "\n" + "================================================================================" + "\n" +
+                           "|                               Build summary                                   |" + "\n" +
+                           "---------------------------------------------------------------------------------" + "\n" +
+                           "${summaryStageProgress.join('\n')}" + "\n" +
+                           "---------------------------------------------------------------------------------" + "\n" +
+                           "|                            Maven modules omitted                              |" + "\n" +
+                           "---------------------------------------------------------------------------------" + "\n" +
+                           "${OMIT_BUILD.join('\n')}" + "\n" +
+                           "---------------------------------------------------------------------------------" + "\n" +
+                           "|                               Images reused                                    |" + "\n" +
+                           "---------------------------------------------------------------------------------" + "\n" +
+                           "${summaryReusedImages.join('\n')}" + "\n" +
+                           "---------------------------------------------------------------------------------" + "\n" +
+                           "|                                 New images                                    |" + "\n" +
+                           "---------------------------------------------------------------------------------" + "\n" +
+                           "${summaryNewImages.join('\n')}" + "\n" +
+                           "=================================================================================" + "\n"
+      }
+      echo "${SUMMARY}"
+  }
+  failure {
+    updateGitlabCommitStatus name: 'build', state: 'failed'
+  }
+  success {
+    updateGitlabCommitStatus name: 'build', state: 'success'
+  }
+ }
+}
