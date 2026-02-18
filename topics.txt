@@ -1,0 +1,110 @@
+#####
+cicd 
+Why jenkins 
+installing jenkins 
+jenkins CLI
+#####
+jenkins plugins
+plugin mgmt with cli 
+#####
+Jenkins visuals(UI)
+Managing users anf teams
+managing system and creds
+build history and cicd visuals 
+#####
+Administering jenkins
+backup and restore jenkins 
+monitoring jenkins
+prometheus 
+######
+jenkinsfile 
+multistage pipeline
+CI pipeline 
+CD pipeline 
+Full piepline deployment
+
+#########
+Build agents:
+
+
+####
+blue ocean:
+enkins Blue Ocean is a modern user interface and visual editor for Jenkins that provides a more intuitive and user-friendly way to create, visualize, and interact with continuous delivery pipelines. It offers a sleek and responsive design,
+ making it easier for both developers and non-developers to understand and manage their Jenkins pipelines.
+
+
+######
+jenkins security:
+To enhance security in Jenkins, you can take several measures, including:
+
+Access Control: Implement proper access controls by defining roles and permissions for users. Restrict privileges to only those necessary for each user or group.
+
+Authentication: Utilize strong authentication methods, such as LDAP, Active Directory, or integration with OAuth providers. Enable and enforce the use of strong passwords.
+
+Plugin Security: Regularly update Jenkins and its plugins to the latest versions to patch security vulnerabilities. Only install and use plugins from trusted sources.
+
+Job and Build Configuration: Avoid using hardcoded secrets in job configurations. Use credentials and secrets management systems provided by Jenkins to securely store and use sensitive information.
+
+Network Security: Place Jenkins behind a firewall and restrict network access to only necessary ports. Consider using VPNs or other secure network configurations.
+
+Secure Shell (SSH) Usage: If using SSH for communication, ensure that SSH keys are properly managed, and only authorized keys are in use. Rotate SSH keys regularly.
+Audit Logging: Enable and review Jenkins audit logs to track user activities. This helps in identifying potential security incidents and understanding who did what in the system.
+
+Build Environment Security: Isolate build environments and utilize containerization or virtualization to enhance security and prevent contamination between builds.
+
+Backup and Recovery: Regularly backup Jenkins configurations and critical data. Establish a robust disaster recovery plan to quickly restore the system in case of a security incident.
+
+Security Scanning: Integrate security scanning tools into the CI/CD pipeline to automatically identify and address security vulnerabilities in the code.
+
+Access control for builds:
+Access control for builds in Jenkins can be enforced through the following mechanisms:
+
+User Permissions: Assign specific permissions to users or groups based on their roles in the organization. Limit access to build jobs and other sensitive information only to those who require it for their responsibilities.
+
+Matrix-Based Security: Utilize Jenkins' Matrix-Based Security to define fine-grained access controls. This allows administrators to specify permissions for each user or group on individual jobs or nodes.
+
+Project-based Matrix Authorization Strategy: Implement a matrix authorization strategy at the project level. This enables project administrators to control who can configure or build a specific project.
+
+Credentials and Secrets Management: Manage sensitive information such as API keys, passwords, and other credentials securely using the Credentials plugin. Restrict access to these credentials based on user roles and permissions.
+
+Job and Node Restrictions: Use job and node restrictions to limit where a job can be executed. This helps control which agents or nodes are accessible for running specific builds.
+
+Build Triggers and Parameters: Control who can trigger builds by restricting build triggers based on user roles. Additionally, set up parameters to ensure that only authorized users can provide input during the build process.
+
+Build Authentication Tokens: Utilize build authentication tokens to add an additional layer of security to build triggers. This ensures that only users with the correct token can trigger specific builds.
+
+Audit Logging: Enable and regularly review Jenkins audit logs to track user activities related to build configurations and executions. This helps identify and respond to unauthorized access or actions.
+
+security pipeline matrix:
+In Jenkins, a pipeline matrix, often associated with the Matrix Authorization Strategy plugin, allows for fine-grained access control to secure pipeline executions. Here's how you can implement security measures using a pipeline matrix:
+
+Matrix Authorization Strategy:
+
+Enable the Matrix Authorization Strategy plugin in Jenkins.
+Navigate to "Manage Jenkins" > "Configure Global Security" and select "Matrix-based security" as the Authorization method.
+Define Permissions Matrix:
+
+In the matrix, define the permissions for different users or groups against specific pipeline-related actions such as build, configure, read, and discover.
+For example, specify which users or groups have the authority to configure or trigger specific pipeline jobs.
+Project-Specific Authorization:
+
+Apply the matrix authorization at the project level to control access to individual pipelines.
+Configure permissions for each user or group based on the principle of least privilege, ensuring users only have the necessary permissions for their tasks.
+Credentials Management:
+
+Utilize the Credentials plugin to manage and secure sensitive information within the pipeline.
+Restrict access to credentials based on the matrix permissions, ensuring that only authorized users can access and use sensitive data.
+Agent and Node Permissions:
+
+Extend the matrix to control access to build agents or nodes.
+Specify which users or groups are allowed to execute pipelines on specific agents, adding an extra layer of security to the build environment.
+Audit Logging:
+
+Enable Jenkins audit logging to monitor and track user activities related to pipeline configurations and executions.
+Regularly review audit logs to identify and respond to any unauthorized access or actions in the pipeline matrix.
+Pipeline Script Security:
+
+If using scripted pipelines, be aware of Pipeline Script Security.
+Restrict the use of certain commands or methods within pipeline scripts to prevent potential security vulnerabilities.
+
+
